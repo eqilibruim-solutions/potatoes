@@ -1,0 +1,68 @@
+version: '3'
+services:
+  postgres:
+    image: postgres
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_DB: tweets
+      POSTGRES_PASSWORD: postgres
+
+  metabase:
+    image: metabase/metabase
+    restart: unless-stopped
+    volumes:
+      - mbdata:/metabase-data
+    ports:
+      - 3000:3000
+    depends_on:
+      - postgres
+
+  neo4j:
+    image: neo4j
+    restart: unless-stopped
+    volumes:
+      - neo4jdata:/data
+    ports:
+      - 7474:7474
+    environment:
+      NEO4J_AUTH: 'neo4j/neo4j1'
+ 
+  nginx:
+    image: lxshpk/nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "7687:7687"
+    links:
+      - neo4j
+      - metabase
+    environment:
+      NGINX_PROXY_PASS: |
+        https://metabase.potatoes.alxs.dev -> http://metabase:3000
+        https://neo4j.potatoes.alxs.dev -> http://neo4j:7474
+      NGINX_CUSTOM_CONFIG: |
+        upstream neo4ju { server neo4j:7687; }
+        server {
+          listen 7687 ssl;
+          server_name neo4j.potatoes.alxs.dev;
+          set $$upstream "neo4ju";
+
+          include conf.d/ssl.inc;
+          include conf.d/proxy.inc;
+        }
+      
+      CERTBOT_EMAIL: real.email@fake.mail.com
+      # CERTBOT_ARGS: --dry-run
+
+volumes:
+  pgdata:
+    driver: local
+  neo4jdata:
+    driver: local
+  mbdata:
+    driver: local
